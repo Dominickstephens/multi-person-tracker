@@ -9,6 +9,7 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader
 from torchvision.models.detection import keypointrcnn_resnet50_fpn
 from yolov3.yolo import YOLOv3
+from torchvision.transforms.functional import to_tensor
 
 from multi_person_tracker import Sort
 from multi_person_tracker.data import ImageFolder, images_to_video
@@ -57,6 +58,54 @@ class MPT():
 
         self.tracker = Sort()
 
+    torch.no_grad()
+    def detect_frame(self, rgb_frame):
+        '''
+        Run detector on a single RGB frame.
+
+        :param rgb_frame (numpy.ndarray): input RGB frame (H x W x C)
+        :return: detections (numpy.ndarray): detection results for the frame
+        '''
+        if not isinstance(rgb_frame, np.ndarray):
+            raise TypeError("Input frame must be a NumPy ndarray.")
+        if rgb_frame.ndim != 3 or rgb_frame.shape[2] != 3:
+             raise ValueError("Input frame must be an HxWx3 NumPy ndarray.")
+
+        # 1. Convert frame to tensor
+        frame_tensor = to_tensor(rgb_frame).to(self.device)
+
+        # 2. Add batch dimension
+        batch = [frame_tensor] # Create a list containing the single tensor
+
+        # 3. Run detection
+        # Depending on your detector type ('yolo' or 'maskrcnn'),
+        # the detector might expect a list of tensors or a stacked tensor.
+        # The YOLOv3 implementation used seems to handle a list directly.
+        # If using MaskRCNN or another detector, you might need:
+        # batch_tensor = torch.stack(batch).to(self.device)
+        # predictions = self.detector(batch_tensor)
+        predictions = self.detector(batch) # Pass the list as a batch
+
+        # 4. Process predictions for the single frame
+        detections_frame = []
+        if predictions: # Check if predictions is not empty
+            pred = predictions[0] # Get the predictions for the first (only) image
+            bb = pred['boxes'].cpu().numpy()
+            sc = pred['scores'].cpu().numpy()[..., None]
+            dets = np.hstack([bb, sc])
+            dets = dets[sc[:, 0] > self.detection_threshold]
+            
+            # Convert detections format if needed (similar to prepare_output_detections)
+            for d in dets:
+                w, h = d[2] - d[0], d[3] - d[1]
+                c_x, c_y = d[0] + w / 2, d[1] + h / 2
+                # You might want the original [x1, y1, x2, y2, score] format directly
+                # bbox = np.array([c_x, c_y, w, h]) # Center coords, width, height
+                bbox = np.array([d[0], d[1], d[2], d[3]]) # x1, y1, x2, y2
+                detections_frame.append(np.append(bbox, d[4])) # Add score back
+
+        return np.array(detections_frame)
+
     @torch.no_grad()
     def run_tracker(self, dataloader):
         '''
@@ -70,7 +119,7 @@ class MPT():
         self.tracker = Sort()
 
         start = time.time()
-        print('Running Multi-Person-Tracker')
+        # print('Running Multi-Person-Tracker')
         trackers = []
         for batch in tqdm(dataloader):
             batch = batch.to(self.device)
@@ -92,7 +141,7 @@ class MPT():
 
         runtime = time.time() - start
         fps = len(dataloader.dataset) / runtime
-        print(f'Finished. Detection + Tracking FPS {fps:.2f}')
+        # print(f'Finished. Detection + Tracking FPS {fps:.2f}')
         return trackers
 
     @torch.no_grad()
@@ -105,9 +154,10 @@ class MPT():
         '''
 
         start = time.time()
-        print('Running Multi-Person-Tracker')
+        # print('Running Multi-Person-Tracker')
         detections = []
-        for batch in tqdm(dataloader):
+        # for batch in tqdm(dataloader):
+        for batch in dataloader: 
             batch = batch.to(self.device)
 
             predictions = self.detector(batch)
@@ -122,7 +172,7 @@ class MPT():
 
         runtime = time.time() - start
         fps = len(dataloader.dataset) / runtime
-        print(f'Finished. Detection + Tracking FPS {fps:.2f}')
+        # print(f'Finished. Detection + Tracking FPS {fps:.2f}')
         return detections
 
     def prepare_output_detections(self, detections):
@@ -179,7 +229,7 @@ class MPT():
         :param trackers (ndarray): tracklets of shape Nx5 [x1,y1,x2,y2,track_id]
         :return: None
         '''
-        print('Displaying results..')
+        # print('Displaying results..')
 
         save = True if output_file else False
         tmp_write_folder = osp.join('/tmp', f'{osp.basename(image_folder)}_mpt_results')
