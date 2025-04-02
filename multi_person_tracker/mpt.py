@@ -119,7 +119,7 @@ class MPT():
         self.tracker = Sort()
 
         start = time.time()
-        print('Running Multi-Person-Tracker')
+        # print('Running Multi-Person-Tracker')
         trackers = []
         for batch in tqdm(dataloader):
             batch = batch.to(self.device)
@@ -141,7 +141,7 @@ class MPT():
 
         runtime = time.time() - start
         fps = len(dataloader.dataset) / runtime
-        print(f'Finished. Detection + Tracking FPS {fps:.2f}')
+        # print(f'Finished. Detection + Tracking FPS {fps:.2f}')
         return trackers
 
     @torch.no_grad()
@@ -154,9 +154,10 @@ class MPT():
         '''
 
         start = time.time()
-        print('Running Multi-Person-Tracker')
+        # print('Running Multi-Person-Tracker')
         detections = []
-        for batch in tqdm(dataloader):
+        # for batch in tqdm(dataloader):
+        for batch in dataloader: 
             batch = batch.to(self.device)
 
             predictions = self.detector(batch)
@@ -171,7 +172,7 @@ class MPT():
 
         runtime = time.time() - start
         fps = len(dataloader.dataset) / runtime
-        print(f'Finished. Detection + Tracking FPS {fps:.2f}')
+        # print(f'Finished. Detection + Tracking FPS {fps:.2f}')
         return detections
 
     def prepare_output_detections(self, detections):
@@ -228,7 +229,7 @@ class MPT():
         :param trackers (ndarray): tracklets of shape Nx5 [x1,y1,x2,y2,track_id]
         :return: None
         '''
-        print('Displaying results..')
+        # print('Displaying results..')
 
         save = True if output_file else False
         tmp_write_folder = osp.join('/tmp', f'{osp.basename(image_folder)}_mpt_results')
