@@ -58,7 +58,7 @@ class MPT():
 
         self.tracker = Sort()
 
-    torch.no_grad()
+    @torch.no_grad()
     def detect_frame(self, rgb_frame):
         '''
         Run detector on a single RGB frame.
@@ -74,35 +74,42 @@ class MPT():
         # 1. Convert frame to tensor
         frame_tensor = to_tensor(rgb_frame).to(self.device)
 
-        # 2. Add batch dimension
-        batch = [frame_tensor] # Create a list containing the single tensor
+        # 2. Add batch dimension by STACKING the tensor
+        # batch = [frame_tensor] # <-- Original incorrect line
+        batch_tensor = torch.stack([frame_tensor]) # <-- *** CORRECTED LINE ***
 
-        # 3. Run detection
-        # Depending on your detector type ('yolo' or 'maskrcnn'),
-        # the detector might expect a list of tensors or a stacked tensor.
-        # The YOLOv3 implementation used seems to handle a list directly.
-        # If using MaskRCNN or another detector, you might need:
-        # batch_tensor = torch.stack(batch).to(self.device)
-        # predictions = self.detector(batch_tensor)
-        predictions = self.detector(batch) # Pass the list as a batch
+        # 3. Run detection using the stacked tensor
+        # predictions = self.detector(batch) # <-- Original incorrect line
+        predictions = self.detector(batch_tensor) # <-- *** CORRECTED LINE ***
 
         # 4. Process predictions for the single frame
         detections_frame = []
-        if predictions: # Check if predictions is not empty
-            pred = predictions[0] # Get the predictions for the first (only) image
-            bb = pred['boxes'].cpu().numpy()
-            sc = pred['scores'].cpu().numpy()[..., None]
-            dets = np.hstack([bb, sc])
-            dets = dets[sc[:, 0] > self.detection_threshold]
+        if predictions: 
+            # Check if predictions is a dict (YOLOv3 specific) or list
+            if isinstance(predictions, dict): # Handle dict output from YOLOv3
+                 # Assuming the dict format from mkocabas/yolov3-pytorch is {'boxes': ..., 'scores': ...} per image in batch
+                 # Since batch size is 1, access the first element's results if needed
+                 # Note: The exact structure might vary; adjust based on actual output
+                 # If predictions directly contains boxes/scores for the single image:
+                 pred = predictions 
+            elif isinstance(predictions, list) and len(predictions) > 0: # Handle list output (e.g., MaskRCNN)
+                 pred = predictions[0] 
+            else:
+                 pred = None # Or handle unexpected format
+
+            if pred and 'boxes' in pred and 'scores' in pred:
+                bb = pred['boxes'].cpu().numpy()
+                sc = pred['scores'].cpu().numpy()
+                # Ensure scores have a second dimension for hstack
+                if sc.ndim == 1:
+                    sc = sc[..., None]
+                
+                dets = np.hstack([bb, sc])
+                dets = dets[dets[:, -1] > self.detection_threshold] # Filter by score (last column)
             
-            # Convert detections format if needed (similar to prepare_output_detections)
-            for d in dets:
-                w, h = d[2] - d[0], d[3] - d[1]
-                c_x, c_y = d[0] + w / 2, d[1] + h / 2
-                # You might want the original [x1, y1, x2, y2, score] format directly
-                # bbox = np.array([c_x, c_y, w, h]) # Center coords, width, height
-                bbox = np.array([d[0], d[1], d[2], d[3]]) # x1, y1, x2, y2
-                detections_frame.append(np.append(bbox, d[4])) # Add score back
+                # Convert detections format if needed (using x1,y1,x2,y2,score)
+                for d in dets:
+                    detections_frame.append(d) # Append directly [x1, y1, x2, y2, score]
 
         return np.array(detections_frame)
 
