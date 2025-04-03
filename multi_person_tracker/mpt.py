@@ -84,16 +84,16 @@ class MPT():
 
         # 4. Process predictions for the single frame
         detections_frame = []
-        if predictions: 
+        if predictions:
             # Check if predictions is a dict (YOLOv3 specific) or list
             if isinstance(predictions, dict): # Handle dict output from YOLOv3
                  # Assuming the dict format from mkocabas/yolov3-pytorch is {'boxes': ..., 'scores': ...} per image in batch
                  # Since batch size is 1, access the first element's results if needed
                  # Note: The exact structure might vary; adjust based on actual output
                  # If predictions directly contains boxes/scores for the single image:
-                 pred = predictions 
+                 pred = predictions
             elif isinstance(predictions, list) and len(predictions) > 0: # Handle list output (e.g., MaskRCNN)
-                 pred = predictions[0] 
+                 pred = predictions[0]
             else:
                  pred = None # Or handle unexpected format
 
@@ -103,10 +103,10 @@ class MPT():
                 # Ensure scores have a second dimension for hstack
                 if sc.ndim == 1:
                     sc = sc[..., None]
-                
+
                 dets = np.hstack([bb, sc])
                 dets = dets[dets[:, -1] > self.detection_threshold] # Filter by score (last column)
-            
+
                 # Convert detections format if needed (using x1,y1,x2,y2,score)
                 for d in dets:
                     detections_frame.append(d) # Append directly [x1, y1, x2, y2, score]
@@ -164,7 +164,7 @@ class MPT():
         # print('Running Multi-Person-Tracker')
         detections = []
         # for batch in tqdm(dataloader):
-        for batch in dataloader: 
+        for batch in dataloader:
             batch = batch.to(self.device)
 
             predictions = self.detector(batch)
